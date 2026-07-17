@@ -139,6 +139,7 @@ $script:SyncTask = $null
 $script:LastSyncAttemptMinute = $null
 $script:SyncHealthy = $false
 $script:IndicatorLit = $false
+$script:StopAndGo = $true
 $script:StartupValueName = 'MondaneStopAndGoClock'
 $script:StartupKeyPath = 'Software\Microsoft\Windows\CurrentVersion\Run'
 $script:ScriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -260,17 +261,21 @@ function Update-Clock {
     $now = ([DateTime]::UtcNow + $script:ClockOffset).ToLocalTime()
     $elapsed = $now.Second + ($now.Millisecond / 1000.0)
 
-    # The sweep completes in 59 seconds, then waits at 12 for one second.
-    $secondAngle = if ($elapsed -lt 59.0) { ($elapsed / 59.0) * 360.0 } else { 0.0 }
+    # Stop-and-go uses a 59-second sweep and a one-second stop. Conventional
+    # mode uses the exact elapsed fraction of a full minute.
+    $secondAngle = if ($script:StopAndGo) {
+        if ($elapsed -lt 59.0) { ($elapsed / 59.0) * 360.0 } else { 0.0 }
+    } else { ($elapsed / 60.0) * 360.0 }
 
     # While the second hand is stopped, ease the minute hand to its next mark.
     # Smoothstep gives the movement gentle acceleration and deceleration while
     # remaining continuous across the minute boundary.
-    $minuteAdvance = 0.0
-    if ($elapsed -ge 59.0) {
-        $progress = [Math]::Min(1.0, [Math]::Max(0.0, $elapsed - 59.0))
-        $minuteAdvance = $progress * $progress * (3.0 - (2.0 * $progress))
-    }
+    $minuteAdvance = if ($script:StopAndGo) {
+        if ($elapsed -ge 59.0) {
+            $progress = [Math]::Min(1.0, [Math]::Max(0.0, $elapsed - 59.0))
+            $progress * $progress * (3.0 - (2.0 * $progress))
+        } else { 0.0 }
+    } else { $elapsed / 60.0 }
     $displayMinute = $now.Minute + $minuteAdvance
     $minuteAngle = $displayMinute * 6.0
     $hourAngle = (($now.Hour % 12) + ($displayMinute / 60.0)) * 30.0
@@ -385,6 +390,17 @@ $startupMenuItem.Add_Click({
     }
 })
 [void]$contextMenu.Items.Add($startupMenuItem)
+
+$stopAndGoMenuItem = [Windows.Controls.MenuItem]::new()
+$stopAndGoMenuItem.Header = 'Stop-and-go motion'
+$stopAndGoMenuItem.IsCheckable = $true
+$stopAndGoMenuItem.IsChecked = $true
+$stopAndGoMenuItem.Add_Click({
+    $script:StopAndGo = $stopAndGoMenuItem.IsChecked
+    $script:IndicatorLit = $null
+    Update-Clock
+})
+[void]$contextMenu.Items.Add($stopAndGoMenuItem)
 
 $syncMenuItem = [Windows.Controls.MenuItem]::new()
 $syncMenuItem.Header = 'Sync now'

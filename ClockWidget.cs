@@ -14,8 +14,8 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Stop-and-Go Clock")]
 [assembly: AssemblyDescription("Portable NTP-synchronized stop-and-go clock")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.1.0")]
+[assembly: AssemblyFileVersion("1.1.1.0")]
 
 internal static class Program
 {
@@ -69,6 +69,7 @@ internal sealed class ClockWindow : Window
     private string lastSyncAttemptMinute;
     private bool syncHealthy;
     private bool? indicatorLit;
+    private bool stopAndGo = true;
 
     public ClockWindow()
     {
@@ -182,6 +183,20 @@ internal sealed class ClockWindow : Window
             }
         };
         menu.Items.Add(startupMenuItem);
+
+        var stopAndGoMenuItem = new MenuItem
+        {
+            Header = "Stop-and-go motion",
+            IsCheckable = true,
+            IsChecked = true
+        };
+        stopAndGoMenuItem.Click += delegate
+        {
+            stopAndGo = stopAndGoMenuItem.IsChecked;
+            indicatorLit = null;
+            UpdateClock();
+        };
+        menu.Items.Add(stopAndGoMenuItem);
 
         var syncNow = new MenuItem { Header = "Sync now" };
         syncNow.Click += delegate { StartTimeSync(); };
@@ -297,14 +312,21 @@ internal sealed class ClockWindow : Window
     {
         DateTime now = (DateTime.UtcNow + clockOffset).ToLocalTime();
         double elapsed = now.Second + now.Millisecond / 1000.0;
-        double secondAngle = elapsed < 59.0 ? elapsed / 59.0 * 360.0 : 0.0;
+        double secondAngle = stopAndGo
+            ? (elapsed < 59.0 ? elapsed / 59.0 * 360.0 : 0.0)
+            : elapsed / 60.0 * 360.0;
 
-        double minuteAdvance = 0.0;
-        if (elapsed >= 59.0)
+        double minuteAdvance;
+        if (stopAndGo)
         {
-            double progress = Math.Min(1.0, Math.Max(0.0, elapsed - 59.0));
-            minuteAdvance = progress * progress * (3.0 - 2.0 * progress);
+            minuteAdvance = 0.0;
+            if (elapsed >= 59.0)
+            {
+                double progress = Math.Min(1.0, Math.Max(0.0, elapsed - 59.0));
+                minuteAdvance = progress * progress * (3.0 - 2.0 * progress);
+            }
         }
+        else minuteAdvance = elapsed / 60.0;
         double displayMinute = now.Minute + minuteAdvance;
         double minuteAngle = displayMinute * 6.0;
         double hourAngle = ((now.Hour % 12) + displayMinute / 60.0) * 30.0;
