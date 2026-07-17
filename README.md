@@ -1,4 +1,4 @@
-# Mondane Stop-and-Go Clock
+# Stop-and-Go Clock
 
 A small, dependency-free Windows clock widget inspired by the stop-and-go railway-clock design. It uses a clean analog face, a fast sweep that reaches 12 in 59 seconds, and a one-second pause during which the minute hand eases smoothly to its next marker.
 
